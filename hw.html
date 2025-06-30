@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>射擊遊戲</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+
+    #game {
+      width: 100vw;
+      height: 100vh;
+      background: url('./房間.jpg') no-repeat center center/cover;
+      position: relative;
+      cursor: none;
+    }
+
+    #game > img {
+      height: auto;
+      position: absolute;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .target, .blood {
+      width: 35px;
+      height: 35px;
+      object-fit: contain;
+    }
+
+    .blood {
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .target {
+      z-index: 1;
+    }
+
+    #custom-cursor {
+      width: 150px;
+      height: 150px;
+      background: url('./electric-shock.png') no-repeat center center/contain;
+      position: absolute;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: bolder;
+    }
+
+    span {
+      margin: 5px;
+      font-family: "微軟正黑體";
+    }
+
+    .arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 50px;
+      height: 50px;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 30px;
+      font-weight: 500;
+      cursor: pointer;
+      z-index: 1002;
+      user-select: none;
+      border-radius: 50%;
+    }
+
+    .arrow:hover {
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    #arrow-left {
+      left: 10px;
+    }
+
+    #arrow-right {
+      right: 10px;
+    }
+
+    input {
+      border-radius: 10%;
+      background-color: lightseagreen;
+      color: white;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <span>消除擾人的蚊子</span>
+    <input type="button" value="Play" id="btn-start">
+    <span>分數: <span id="text-score">0</span></span>
+    <span>剩餘: <span id="text-time">0</span></span>
+    <span>最高分玩家: <span id="text-highscore-name">-</span></span>
+    <span>最高分分數: <span id="text-highscore-score">0</span></span>
+  </div>
+  <div id="game">
+    <div id="custom-cursor"></div>
+    <div id="arrow-left" class="arrow">←</div>
+    <div id="arrow-right" class="arrow">→</div>
+  </div>
+  <audio id="mosquito-buzz" src="./game/mosquito.wav" preload="auto"></audio>
+  <audio id="electric-zap" src="./game/electric-shock.wav" preload="auto"></audio>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    const GAME_TIME = 30;
+    let score = 0;
+    let timeLeft = 0;
+    let timer = 0;
+    const highscore = {
+      name: '-',
+      score: 0
+    };
+
+    // 背景圖片陣列
+    const backgrounds = ['./房間.jpg', './客廳.jpg', './後院.jpg'];
+    let currentBackgroundIndex = 0;
+
+    // 載入最高分
+    if (localStorage.apple) {
+      const data = JSON.parse(localStorage.apple);
+      highscore.score = data.score;
+      highscore.name = data.name;
+      $('#text-highscore-name').text(highscore.name);
+      $('#text-highscore-score').text(highscore.score);
+    }
+
+    // 自訂游標跟隨滑鼠
+    $(document).mousemove(function (e) {
+      $('#custom-cursor').css({
+        left: e.pageX - 75, // 150 ÷ 2
+        top: e.pageY - 75
+      });
+    });
+
+    // 背景切換：左箭頭
+    $('#arrow-left').on('click', function () {
+      currentBackgroundIndex = (currentBackgroundIndex - 1 + backgrounds.length) % backgrounds.length;
+      $('#game').css('background-image', `url(${backgrounds[currentBackgroundIndex]})`);
+    });
+
+    // 背景切換：右箭頭
+    $('#arrow-right').on('click', function () {
+      currentBackgroundIndex = (currentBackgroundIndex + 1) % backgrounds.length;
+      $('#game').css('background-image', `url(${backgrounds[currentBackgroundIndex]})`);
+    });
+
+    // 開始遊戲函數
+    function startGame() {
+      $('#btn-start').attr('disabled', true);
+      score = 0;
+      $('#text-score').text(score);
+      timeLeft = GAME_TIME;
+      $('#text-time').text(timeLeft);
+
+      timer = setInterval(function () {
+        timeLeft--;
+        $('#text-time').text(timeLeft);
+
+        const random = Math.random() * 10;
+        if (random >= 3 && $('.target').length < 10) {
+          const target = $('<img class="target" src="./mosquito.png" alt="">');
+          const top = Math.random() * (window.innerHeight - 35);
+          const left = Math.random() * (window.innerWidth - 35);
+          target.css({ top, left });
+          $('#game').append(target);
+          move(target);
+          const buzzSound = document.getElementById('mosquito-buzz');
+          buzzSound.currentTime = 0;
+          buzzSound.play();
+        }
+
+        if (timeLeft === 0) {
+          clearInterval(timer);
+          $('#btn-start').attr('disabled', false);
+          $('#game').find('.target, .blood').remove();
+          // 停止蚊子嗡嗡聲
+          const buzzSound = document.getElementById('mosquito-buzz');
+          buzzSound.pause();
+          buzzSound.currentTime = 0;
+
+          // 顯示遊戲結束視窗
+          Swal.fire({
+            title: '遊戲結束！',
+            text: `您擊暈了 ${score} 隻蚊子！`,
+            confirmButtonText: '重新開始',
+            showCancelButton: true,
+            cancelButtonText: '關閉'
+          }).then(result => {
+            if (result.isConfirmed) {
+              startGame(); // 點擊重新開始
+            }
+            if (score > highscore.score) {
+              Swal.fire({
+                title: '最高分',
+                text: '請輸入名字',
+                input: 'text'
+              }).then(result => {
+                const name = result.value || 'AAA';
+                highscore.score = score;
+                highscore.name = name;
+                $('#text-highscore-name').text(name);
+                $('#text-highscore-score').text(score);
+                localStorage.apple = JSON.stringify(highscore);
+              });
+            }
+          });
+        }
+      }, 1000);
+    }
+
+    $('#btn-start').on('click', startGame);
+
+    function move(target) {
+      const top = Math.random() * (window.innerHeight - 35);
+      const left = Math.random() * (window.innerWidth - 35);
+      target.animate({ top, left }, 2000, function () {
+        if (target.hasClass('target')) move(target);
+      });
+    }
+
+    // 點擊範圍檢測
+    $('#game').on('click', function (e) {
+      const clickX = e.pageX;
+      const clickY = e.pageY;
+      const hitRadius = 50; // 電蚊拍點擊範圍半徑
+
+      $('.target').each(function () {
+        const target = $(this);
+        const targetPos = target.position();
+        const targetX = targetPos.left + 17.5; // 蚊子中心：35 ÷ 2
+        const targetY = targetPos.top + 17.5;
+        const distance = Math.sqrt((clickX - targetX) ** 2 + (clickY - targetY) ** 2);
+
+        if (distance <= hitRadius) {
+          target.stop();
+          target.attr('src', './mosquito dead.png');
+          target.removeClass('target').addClass('blood');
+          score++;
+          $('#text-score').text(score);
+          const zapSound = document.getElementById('electric-zap');
+          zapSound.currentTime = 0;
+          zapSound.play();
+          setTimeout(() => {
+            target.remove();
+          }, 2000);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
